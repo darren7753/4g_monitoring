@@ -57,7 +57,7 @@ def main():
         period = col1.selectbox(label="Period", options=["Daily", "Weekly", "Monthly"], index=0, key="period_dwm")
         start_date = col2.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_dwm")
         today = datetime.datetime.now().date()
-        end_date = col3.date_input(label="End Date", value=today, key="end_date_dwm")
+        end_date = col3.date_input(label="End Date", value=today + datetime.timedelta(hours=7), key="end_date_dwm")
 
     def render_hourly_inputs():
         st.markdown(f"<h1 style='text-align: center;'>4G Monitoring - TSEL EID</h1>", unsafe_allow_html=True)
@@ -79,7 +79,7 @@ def main():
         period = col1.selectbox(label="Period", options=["Hourly"], index=0, key="period_hourly")
         start_date = col2.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_hourly")
         today = datetime.datetime.now().date()
-        end_date = col3.date_input(label="End Date", value=today, key="end_date_hourly")
+        end_date = col3.date_input(label="End Date", value=today + datetime.timedelta(hours=7), key="end_date_hourly")
 
     def main_page():
         with st.container():
