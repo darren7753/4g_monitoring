@@ -27,4 +27,4 @@ def encrypt_file(filename, encrypted_filename, key_filename):
     print(f"{filename} has been encrypted as {encrypted_filename} using key in {key_filename}")
 
 # Usage
-encrypt_file("monitoring-396408-6282add4508b.json", "encrypted_credentials.enc", "encryption_key.key")
+encrypt_file("firebase.json", "encrypted_credentials_firebase.enc", "encryption_key_firebase.key")
