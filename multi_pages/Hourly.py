@@ -51,26 +51,29 @@ def app():
         </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f"<h1 style='text-align: center;'>4G Monitoring - TSEL EID</h1>", unsafe_allow_html=True)
+    # st.markdown(f"<h1 style='text-align: center;'>4G Monitoring - TSEL EID</h1>", unsafe_allow_html=True)
 
-    # with st.sidebar:
-    #     st.info("Select a page above")
+    # col1, col2 = st.columns(2)
+    # with col1:
+    #     site_id = st.text_input(label="Site ID", value="saa108", key="site_id_hourly")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        site_id = st.text_input(label="Site ID", value="saa108", key="site_id_hourly")
+    # with col2:
+    #     band = st.multiselect(label="Band", options=["L1800", "L2100", "L2300", "L900"], default=["L1800", "L2100", "L2300", "L900"], key="band_hourly")
 
-    with col2:
-        band = st.multiselect(label="Band", options=["L1800", "L2100", "L2300", "L900"], default=["L1800", "L2100", "L2300", "L900"], key="band_hourly")
+    # col1, col2 = st.columns(2)
+    # with col1:
+    #     start_date = st.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_hourly")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_hourly")
+    # with col2:
+    #     today = datetime.datetime.now() + datetime.timedelta(hours=7)
+    #     today = datetime.datetime.now()
+    #     end_date = st.date_input(label="End Date", value=today.date(), key="end_date_hourly")
 
-    with col2:
-        today = datetime.datetime.now() + datetime.timedelta(hours=7)
-        today = datetime.datetime.now()
-        end_date = st.date_input(label="End Date", value=today.date(), key="end_date_hourly")
+    site_id = st.session_state.site_id_hourly
+    band = st.session_state.band_hourly
+    period = st.session_state.period_hourly
+    start_date = st.session_state.start_date_hourly
+    end_date = st.session_state.end_date_hourly
 
     # Cache for fetching data from GBQ
     @st.cache_data()

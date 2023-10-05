@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import datetime
 
 from multi_pages import Daily_Weekly_Monthly, Hourly
 from firebase_admin import credentials, initialize_app, auth, _apps
@@ -40,19 +41,49 @@ def main():
         decrypted_data = cipher.decrypt(encrypted_data)
 
         return credentials.Certificate(eval(decrypted_data.decode()))
+    
+    def render_dwm_inputs():
+        st.markdown(f"<h1 style='text-align: center;'>4G Monitoring - TSEL EID</h1>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+
+        # Check if site_id exists in session_state, otherwise initialize it
+        if 'site_id_dwm' not in st.session_state:
+            st.session_state.site_id_dwm = "saa108"
+        st.session_state.site_id_dwm = col1.text_input(label="Site ID", value=st.session_state.site_id_dwm)
+
+        band = col2.multiselect(label="Band", options=["L1800", "L2100", "L2300", "L900"], default=["L1800", "L2100", "L2300", "L900"], key="band_dwm")
+
+        col1, col2, col3 = st.columns(3)
+        period = col1.selectbox(label="Period", options=["Daily", "Weekly", "Monthly"], index=0, key="period_dwm")
+        start_date = col2.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_dwm")
+        today = datetime.datetime.now().date()
+        end_date = col3.date_input(label="End Date", value=today, key="end_date_dwm")
+
+    def render_hourly_inputs():
+        st.markdown(f"<h1 style='text-align: center;'>4G Monitoring - TSEL EID</h1>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+
+        # Check if site_id exists in session_state, otherwise initialize it
+        if 'site_id_hourly' not in st.session_state:
+            st.session_state.site_id_hourly = "saa108"
+        st.session_state.site_id_hourly = col1.text_input(label="Site ID", value=st.session_state.site_id_hourly)
+
+        band = col2.multiselect(label="Band", options=["L1800", "L2100", "L2300", "L900"], default=["L1800", "L2100", "L2300", "L900"], key="band_hourly")
+
+        # col1, col2 = st.columns(2)
+        # start_date = col1.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_hourly")
+        # today = datetime.datetime.now().date()
+        # end_date = col2.date_input(label="End Date", value=today, key="end_date_hourly")
+
+        col1, col2, col3 = st.columns(3)
+        period = col1.selectbox(label="Period", options=["Hourly"], index=0, key="period_hourly")
+        start_date = col2.date_input(label="Start Date", value=datetime.date(2023, 7, 1), key="start_date_hourly")
+        today = datetime.datetime.now().date()
+        end_date = col3.date_input(label="End Date", value=today, key="end_date_hourly")
 
     def main_page():
         with st.container():
             page_option = st.sidebar.radio("Choose your page:", ["Home", "Daily-Weekly-Monthly", "Hourly"])
-
-            if 'last_page' not in st.session_state:
-                st.session_state.last_page = None
-
-            if st.session_state.last_page == "Daily-Weekly-Monthly" and page_option == "Hourly":
-                if 'end_date_dwm' in st.session_state:
-                    del st.session_state['end_date_dwm']
-
-            st.session_state.last_page = page_option
 
             if page_option == "Home":
                 st.write(f"Hello {st.session_state['user_email']}, you're logged in!")
@@ -61,9 +92,13 @@ def main():
                     st.session_state["user_email"] = ""
                     st.rerun()
                 st.write("You're on the home page!")
+                
             elif page_option == "Daily-Weekly-Monthly":
+                render_dwm_inputs()
                 Daily_Weekly_Monthly.app()
+
             elif page_option == "Hourly":
+                render_hourly_inputs()
                 Hourly.app()
 
     def login_signup_page():
