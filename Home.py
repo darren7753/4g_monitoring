@@ -34,9 +34,9 @@ def main():
     st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
 
     def load_credentials_firebase():
-        with open("encryption_key_firebase.key", "rb") as key_file:
-            key = key_file.read()
-        # key = os.environ.get("FIREBASE_KEY")
+        # with open("encryption_key_firebase.key", "rb") as key_file:
+        #     key = key_file.read()
+        key = os.environ.get("FIREBASE_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_firebase.enc", "rb") as encrypted_file:
@@ -50,9 +50,9 @@ def main():
         project_id = "monitoring-396408"
         job_location = "asia-southeast2"
 
-        with open("encryption_key_bigquery.key", "rb") as key_file:
-            key = key_file.read()
-        # key = os.environ.get("BIGQUERY_KEY")
+        # with open("encryption_key_bigquery.key", "rb") as key_file:
+        #     key = key_file.read()
+        key = os.environ.get("BIGQUERY_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
@@ -79,9 +79,9 @@ def main():
         project_id = "monitoring-396408"
         job_location = "asia-southeast2"
 
-        with open("encryption_key_bigquery.key", "rb") as key_file:
-            key = key_file.read()
-        # key = os.environ.get("BIGQUERY_KEY")
+        # with open("encryption_key_bigquery.key", "rb") as key_file:
+        #     key = key_file.read()
+        key = os.environ.get("BIGQUERY_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
