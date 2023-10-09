@@ -32,9 +32,9 @@ def main():
     st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
 
     def load_credentials():
-        with open("encryption_key_firebase.key", "rb") as key_file:
-            key = key_file.read()
-        # key = os.environ.get("FIREBASE_KEY")
+        # with open("encryption_key_firebase.key", "rb") as key_file:
+        #     key = key_file.read()
+        key = os.environ.get("FIREBASE_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_firebase.enc", "rb") as encrypted_file:

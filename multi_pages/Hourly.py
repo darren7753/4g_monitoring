@@ -62,9 +62,9 @@ def app():
     # Cache for fetching data from GBQ
     @st.cache_data()    
     def fetch_data(query, project_id):
-        with open("encryption_key_bigquery.key", "rb") as key_file:
-            key = key_file.read()
-        # key = os.environ.get("BIGQUERY_KEY")
+        # with open("encryption_key_bigquery.key", "rb") as key_file:
+        #     key = key_file.read()
+        key = os.environ.get("BIGQUERY_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
