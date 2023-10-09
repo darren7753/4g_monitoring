@@ -1,7 +1,9 @@
 streamlit==1.27.2
-pandas==1.5.1
+# pandas==1.5.1
+# pandas-gbq==0.19.2
 plotly==5.11.0
 google-auth==2.22.0
-pandas-gbq==0.19.2
+google-cloud-bigquery==3.11.4
 cryptography==41.0.3
 firebase-admin==6.2.0
+polars==0.19.7
