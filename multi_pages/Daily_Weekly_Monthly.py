@@ -62,9 +62,9 @@ def app():
     # Cache for fetching data from GBQ
     @st.cache_data()    
     def fetch_data(query, project_id):
-        # with open("encryption_key_bigquery.key", "rb") as key_file:
-        #     key = key_file.read()
-        key = os.environ.get("BIGQUERY_KEY")
+        with open("encryption_key_bigquery.key", "rb") as key_file:
+            key = key_file.read()
+        # key = os.environ.get("BIGQUERY_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
@@ -129,2731 +129,684 @@ def app():
 
         df_polars = fetch_data(query, project_id)
 
-        df_polars = df_polars.with_columns(df_polars["DATE_ID"].cast(pl.Date))
-        df_polars = df_polars.with_columns([
-            (100 - df_polars["LTE_CSFB_SR"]).alias("LTE_CSFB_SR"),
-            (df_polars["Downlink_Traffic_Volume"] / 1000).alias("Downlink_Traffic_Volume"),
-            (df_polars["Uplink_Traffic_Volume"] / 1000).alias("Uplink_Traffic_Volume"),
-            (df_polars["Total_Traffic_Volume"] / 1000).alias("Total_Traffic_Volume")
-        ])
-        df_polars = df_polars.filter(df_polars["Band"].is_in(band_dwm))
-
-        st.markdown(f"<h3>📊 Charts</h3>", unsafe_allow_html=True)
-        col1 = st.columns(1)[0]
-        with col1.expander("Click here to view the data overview"):
-            st.dataframe(df_polars.to_pandas(), height=250)
-
-            def convert_df_to_csv(df):
-                return df.write_csv()
-
-            csv_data = convert_df_to_csv(df_polars)
-            
-            st.download_button(
-                label="Download data as CSV",
-                data=csv_data,
-                file_name="data.csv"
-            )
-
-
-        if period_dwm == "Daily":
-            dtick = 3*24*60*60*1000
-            every = "1d"
-        elif period_dwm == "Weekly":
-            dtick = 7*24*60*60*1000
-            every = "1w"
+        if len(df_polars) == 0:
+            st.warning("Data isn't available.")
         else:
-            dtick = "M1"
-            every = "1mo"
+            df_polars = df_polars.with_columns(df_polars["DATE_ID"].cast(pl.Date))
+            df_polars = df_polars.with_columns([
+                (100 - df_polars["LTE_CSFB_SR"]).alias("LTE_CSFB_SR"),
+                (df_polars["Downlink_Traffic_Volume"] / 1000).alias("Downlink_Traffic_Volume"),
+                (df_polars["Uplink_Traffic_Volume"] / 1000).alias("Uplink_Traffic_Volume"),
+                (df_polars["Total_Traffic_Volume"] / 1000).alias("Total_Traffic_Volume")
+            ])
+            df_polars = df_polars.filter(df_polars["Band"].is_in(band_dwm))
 
-        # ------------------------------------------------------------------Row 1------------------------------------------------------------------
-        plot_title_color = "#FFF"
+            st.markdown(f"<h3>📊 Charts</h3>", unsafe_allow_html=True)
+            col1 = st.columns(1)[0]
+            with col1.expander("Click here to view the data overview"):
+                st.dataframe(df_polars.to_pandas(), height=250)
 
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Site</p>
-            """, unsafe_allow_html=True)
+                def convert_df_to_csv(df):
+                    return df.write_csv()
 
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.5,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=300,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                csv_data = convert_df_to_csv(df_polars)
+                
+                st.download_button(
+                    label="Download data as CSV",
+                    data=csv_data,
+                    file_name="data.csv"
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
 
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Site</p>
-            """, unsafe_allow_html=True)
 
-            target_column = "Total_Traffic_Volume"
+            if period_dwm == "Daily":
+                dtick = 3*24*60*60*1000
+                every = "1d"
+            elif period_dwm == "Weekly":
+                dtick = 7*24*60*60*1000
+                every = "1w"
+            else:
+                dtick = "M1"
+                every = "1mo"
 
-            df = df_polars.sort("DATE_ID")
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every).agg(aggregation)
+            # 1st row
+            col1, col2 = st.columns(2)
+            with col1:
+                target_column = "Total_Traffic_Volume"
 
-            first_date = df["DATE_ID"].head(1)[0]
+                df = df_polars.sort(["DATE_ID", "Band"])
+                aggregation = pl.col(target_column).sum().alias(target_column)
+                df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
 
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.5,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=300,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                first_date = df["DATE_ID"].head(1)[0]
+
+                fig = px.area(
+                    df,
+                    x=df["DATE_ID"],
+                    y=df[target_column],
+                    color=df["Band"],
+                    custom_data=[df["Band"]]
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 2------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                fig.update_layout(
+                    title="Payload - Site",
+                    title_x=0.5,
+                    title_xanchor="center",
+                    xaxis_title="",
+                    yaxis_title=target_column,
+                    legend_title_text="",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.5,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    margin=dict(l=0, r=0, t=30, b=0),
+                    height=340,
+                    xaxis=dict(
+                        tickangle=270,
+                        dtick=dtick,
+                        tick0=first_date,
+                        tickformat="%Y-%m-%d"
+                    )
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                fig.update_traces(
+                    hovertemplate=f"<b>%{{x}}</b><br><br>{target_column}: %{{y}}<br>Band: %{{customdata[0]}}<extra></extra>"
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
 
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 3</p>
-            """, unsafe_allow_html=True)
+            with col2:
+                target_column = "Total_Traffic_Volume"
 
-            target_column = "Total_Traffic_Volume"
+                df = df_polars.sort("DATE_ID")
+                aggregation = pl.col(target_column).sum().alias(target_column)
+                df = df.group_by_dynamic("DATE_ID", every=every).agg(aggregation)
 
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
+                first_date = df["DATE_ID"].head(1)[0]
 
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                fig = px.line(
+                    df,
+                    x=df["DATE_ID"],
+                    y=df[target_column]
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 3------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                fig.update_layout(
+                    title="Payload - Site",
+                    title_x=0.5,
+                    title_xanchor="center",
+                    xaxis_title="",
+                    yaxis_title=target_column,
+                    legend_title_text="",
+                    legend=dict(
+                        orientation="h",
+                        yanchor="top",
+                        y=-0.5,
+                        xanchor="center",
+                        x=0.5
+                    ),
+                    margin=dict(l=0, r=0, t=30, b=0),
+                    height=340,
+                    xaxis=dict(
+                        tickangle=270,
+                        dtick=dtick,
+                        tick0=first_date,
+                        tickformat="%Y-%m-%d"
+                    )
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
+                fig.update_traces(
+                    hovertemplate=f"<b>%{{x}}</b><br><br>{target_column}: %{{y}}<extra></extra>"
                 )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "Band"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="Band").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["Band"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 4------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 5------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Payload - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Total_Traffic_Volume"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).sum().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.area(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 6------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL PRB - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL PRB - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL PRB - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 7------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>CQI - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Average_CQI_nonHOME"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>CQI - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Average_CQI_nonHOME"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>CQI - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Average_CQI_nonHOME"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 8------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SE - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "SE_2"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SE - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "SE_2"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SE - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "SE_2"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 9------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Availability - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Radio_Network_Availability_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Availability - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Radio_Network_Availability_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>Availability - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Radio_Network_Availability_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 10------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RRCSR - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "RRC_Setup_Success_Rate_Service"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RRCSR - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "RRC_Setup_Success_Rate_Service"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RRCSR - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "RRC_Setup_Success_Rate_Service"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 11------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>ERABSR - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "ERAB_Setup_Success_Rate_All"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>ERABSR - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "ERAB_Setup_Success_Rate_All"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>ERABSR - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "ERAB_Setup_Success_Rate_All"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 12------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SSSR - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Setup_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SSSR - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Setup_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SSSR - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Setup_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 13------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SAR - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Abnormal_Release"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SAR - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Abnormal_Release"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>SAR - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Session_Abnormal_Release"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 14------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTRAFreq - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Intra_Frequency_Handover_Out_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTRAFreq - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Intra_Frequency_Handover_Out_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTRAFreq - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "Intra_Frequency_Handover_Out_Success_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 15------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTERFreq - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "inter_freq_HO"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTERFreq - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "inter_freq_HO"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>INTERFreq - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "inter_freq_HO"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 16------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RSSI - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_RSSI_dbm"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RSSI - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_RSSI_dbm"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>RSSI - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_RSSI_dbm"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 17------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>UL PRB - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>UL PRB - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>UL PRB - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "UL_Resource_Block_Utilizing_Rate"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 18------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL_PDCP_User_Throughput - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_PDCP_User_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL_PDCP_User_Throughput - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_PDCP_User_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>DL_PDCP_User_Throughput - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "DL_PDCP_User_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 19------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>User_Uplink_Average_Throughput - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "User_Uplink_Average_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>User_Uplink_Average_Throughput - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "User_Uplink_Average_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>User_Uplink_Average_Throughput - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "User_Uplink_Average_Throughput"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        # ------------------------------------------------------------------Row 20------------------------------------------------------------------
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>LTE_CSFB_SR - Sec 1</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "LTE_CSFB_SR"
-            
-            df = df_polars.filter(pl.col("Sector") == "1")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col2:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>LTE_CSFB_SR - Sec 2</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "LTE_CSFB_SR"
-            
-            df = df_polars.filter(pl.col("Sector") == "2")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with col3:
-            st.markdown(f"""
-            <p style='text-align: center; font-family: "Open Sans", verdana, arial, sans-serif; font-size: 14px; color: {plot_title_color};'>LTE_CSFB_SR - Sec 3</p>
-            """, unsafe_allow_html=True)
-
-            target_column = "LTE_CSFB_SR"
-            
-            df = df_polars.filter(pl.col("Sector") == "3")
-            df = df.sort(["DATE_ID", "EUTRANCELLFDD"])
-            aggregation = pl.col(target_column).mean().alias(target_column)
-            df = df.group_by_dynamic("DATE_ID", every=every, by="EUTRANCELLFDD").agg(aggregation)
-
-            first_date = df["DATE_ID"].head(1)[0]
-
-            fig = px.line(
-                df,
-                x=df["DATE_ID"],
-                y=df[target_column],
-                color=df["EUTRANCELLFDD"],
-            )
-            fig.update_layout(
-                xaxis_title="",
-                yaxis_title=target_column,
-                legend_title_text="",
-                legend=dict(
-                    orientation="h",
-                    yanchor="top",
-                    y=-0.8,
-                    xanchor="center",
-                    x=0.5
-                ),
-                margin=dict(l=0, r=0, t=0, b=0),
-                height=250,
-                xaxis=dict(
-                    tickangle=270,
-                    dtick=dtick,
-                    tick0=first_date,
-                    tickformat="%Y-%m-%d"
-                )
-            )
-            fig.update_traces(
-                hovertemplate=f"<b>%{{x}}</b><br>{target_column}: %{{y}}<extra></extra>"
-            )
-            st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True)
+
+            chart_configs = [
+                # 2nd row
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 1",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "1",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 2",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "2",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 3",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "3",
+                    "aggregation": "sum",
+                },
+                # 3rd row
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 1",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "1",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 2",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "2",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 3",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "Band",
+                    "sector": "3",
+                    "aggregation": "sum",
+                },
+                # 4th row
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 1",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 2",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Payload - Sec 3",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "sum",
+                },
+                # 5th row
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 1",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 2",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "sum",
+                },
+                {
+                    "chart_type": "area",
+                    "title": "Payload - Sec 3",
+                    "target_column": "Total_Traffic_Volume",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "sum",
+                },
+                # 6th row
+                {
+                    "chart_type": "line",
+                    "title": "DL PRB - Sec 1",
+                    "target_column": "DL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "DL PRB - Sec 2",
+                    "target_column": "DL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "DL PRB - Sec 3",
+                    "target_column": "DL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 7h row
+                {
+                    "chart_type": "line",
+                    "title": "CQI - Sec 1",
+                    "target_column": "Average_CQI_nonHOME",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "CQI - Sec 2",
+                    "target_column": "Average_CQI_nonHOME",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "CQI - Sec 3",
+                    "target_column": "Average_CQI_nonHOME",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 8th row
+                {
+                    "chart_type": "line",
+                    "title": "SE - Sec 1",
+                    "target_column": "SE_2",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SE - Sec 2",
+                    "target_column": "SE_2",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SE - Sec 3",
+                    "target_column": "SE_2",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 9th row
+                {
+                    "chart_type": "line",
+                    "title": "Availability - Sec 1",
+                    "target_column": "Radio_Network_Availability_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Availability - Sec 2",
+                    "target_column": "Radio_Network_Availability_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "Availability - Sec 3",
+                    "target_column": "Radio_Network_Availability_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 10th row
+                {
+                    "chart_type": "line",
+                    "title": "RRCSR - Sec 1",
+                    "target_column": "RRC_Setup_Success_Rate_Service",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "RRCSR - Sec 2",
+                    "target_column": "RRC_Setup_Success_Rate_Service",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "RRCSR - Sec 3",
+                    "target_column": "RRC_Setup_Success_Rate_Service",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 11th row
+                {
+                    "chart_type": "line",
+                    "title": "ERABSR - Sec 1",
+                    "target_column": "ERAB_Setup_Success_Rate_All",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "ERABSR - Sec 2",
+                    "target_column": "ERAB_Setup_Success_Rate_All",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "ERABSR - Sec 3",
+                    "target_column": "ERAB_Setup_Success_Rate_All",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 12nd row
+                {
+                    "chart_type": "line",
+                    "title": "SSSR - Sec 1",
+                    "target_column": "Session_Setup_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SSSR - Sec 2",
+                    "target_column": "Session_Setup_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SSSR - Sec 3",
+                    "target_column": "Session_Setup_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 13th row
+                {
+                    "chart_type": "line",
+                    "title": "SAR - Sec 1",
+                    "target_column": "Session_Abnormal_Release",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SAR - Sec 2",
+                    "target_column": "Session_Abnormal_Release",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "SAR - Sec 3",
+                    "target_column": "Session_Abnormal_Release",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 14th row
+                {
+                    "chart_type": "line",
+                    "title": "INTRAFreq - Sec 1",
+                    "target_column": "Intra_Frequency_Handover_Out_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "INTRAFreq - Sec 2",
+                    "target_column": "Intra_Frequency_Handover_Out_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "INTRAFreq - Sec 3",
+                    "target_column": "Intra_Frequency_Handover_Out_Success_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 15th row
+                {
+                    "chart_type": "line",
+                    "title": "INTERFreq - Sec 1",
+                    "target_column": "inter_freq_HO",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "INTERFreq - Sec 2",
+                    "target_column": "inter_freq_HO",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "INTERFreq - Sec 3",
+                    "target_column": "inter_freq_HO",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 16th row
+                {
+                    "chart_type": "line",
+                    "title": "RSSI - Sec 1",
+                    "target_column": "UL_RSSI_dbm",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "RSSI - Sec 2",
+                    "target_column": "UL_RSSI_dbm",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "RSSI - Sec 3",
+                    "target_column": "UL_RSSI_dbm",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 17th row
+                {
+                    "chart_type": "line",
+                    "title": "UL PRB - Sec 1",
+                    "target_column": "UL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "UL PRB - Sec 2",
+                    "target_column": "UL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "UL PRB - Sec 3",
+                    "target_column": "UL_Resource_Block_Utilizing_Rate",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 18th row
+                {
+                    "chart_type": "line",
+                    "title": "DL_PDCP_User_Throughput - Sec 1",
+                    "target_column": "DL_PDCP_User_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "DL_PDCP_User_Throughput - Sec 2",
+                    "target_column": "DL_PDCP_User_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "DL_PDCP_User_Throughput - Sec 3",
+                    "target_column": "DL_PDCP_User_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 19th row
+                {
+                    "chart_type": "line",
+                    "title": "User_Uplink_Average_Throughput - Sec 1",
+                    "target_column": "User_Uplink_Average_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "User_Uplink_Average_Throughput - Sec 2",
+                    "target_column": "User_Uplink_Average_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "User_Uplink_Average_Throughput - Sec 3",
+                    "target_column": "User_Uplink_Average_Throughput",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+                # 20th row
+                {
+                    "chart_type": "line",
+                    "title": "LTE_CSFB_SR - Sec 1",
+                    "target_column": "LTE_CSFB_SR",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "1",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "LTE_CSFB_SR - Sec 2",
+                    "target_column": "LTE_CSFB_SR",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "2",
+                    "aggregation": "mean",
+                },
+                {
+                    "chart_type": "line",
+                    "title": "LTE_CSFB_SR - Sec 3",
+                    "target_column": "LTE_CSFB_SR",
+                    "band_column": "EUTRANCELLFDD",
+                    "sector": "3",
+                    "aggregation": "mean",
+                },
+            ]
+
+            for i in range(0, len(chart_configs), 3):
+                cols = st.columns(3)
+
+                for index, config in enumerate(chart_configs[i:i+3]):
+                    with cols[index]:
+                        target_column = config["target_column"]
+
+                        df = df_polars.filter(pl.col("Sector") == config["sector"])
+                        df = df.sort(["DATE_ID", config["band_column"]])
+
+                        if config["aggregation"] == "sum":
+                            aggregation = pl.col(target_column).sum().alias(target_column)
+                        elif config["aggregation"] == "mean":
+                            aggregation = pl.col(target_column).mean().alias(target_column)
+
+                        df = df.group_by_dynamic("DATE_ID", every=every, by=config["band_column"]).agg(aggregation)
+
+                        first_date = df["DATE_ID"].head(1)[0]
+
+                        if config["chart_type"] == "area":
+                            fig = px.area(
+                                df,
+                                x=df["DATE_ID"],
+                                y=df[target_column],
+                                color=df[config["band_column"]],
+                                custom_data=[df[config["band_column"]]]
+                            )
+                        elif config["chart_type"] == "line":
+                            fig = px.line(
+                                df,
+                                x=df["DATE_ID"],
+                                y=df[target_column],
+                                color=df[config["band_column"]],
+                                custom_data=[df[config["band_column"]]]
+                            )
+
+                        fig.update_layout(
+                            title=dict(
+                                text=config["title"],
+                                x=0.5,
+                                xanchor="center"
+                            ),
+                            xaxis_title="",
+                            yaxis_title=target_column,
+                            legend_title_text="",
+                            legend=dict(
+                                orientation="h",
+                                yanchor="top",
+                                y=-0.8,
+                                xanchor="center",
+                                x=0.5
+                            ),
+                            margin=dict(l=0, r=0, t=30, b=0),
+                            height=290,
+                            xaxis=dict(
+                                tickangle=270,
+                                dtick=dtick,
+                                tick0=first_date,
+                                tickformat="%Y-%m-%d"
+                            )
+                        )
+
+                        if config["title"].split("-")[0].strip() in ["Availability", "INTRAFreq", "INTERFreq", "LTE_CSFB_SR", "DL PRB"]:
+                            fig.update_layout(
+                                yaxis_range=[None, 100]
+                            )
+                        if config["title"].split("-")[0].strip() in ["SSSR", "RRCSR", "ERABSR"]:
+                            fig.update_layout(
+                                yaxis_range=[90, 100]
+                            )
+
+                        fig.update_traces(
+                            hovertemplate=f"<b>%{{x}}</b><br><br>{target_column}: %{{y}}<br>Band: %{{customdata[0]}}<extra></extra>"
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)

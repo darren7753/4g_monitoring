@@ -1,9 +1,12 @@
 import streamlit as st
 import os
 import datetime
+import polars as pl
 
 from multi_pages import Daily_Weekly_Monthly, Hourly
 from firebase_admin import credentials, initialize_app, auth, _apps
+from google.cloud import bigquery
+from google.oauth2.service_account import Credentials
 from cryptography.fernet import Fernet
 from streamlit_option_menu import option_menu
 
@@ -25,16 +28,15 @@ def main():
 
     hide_decoration_bar_style = """
         <style>
-            header {visibility: hidden;}
             footer {visibility: hidden;}
         </style>
     """
     st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
 
-    def load_credentials():
-        # with open("encryption_key_firebase.key", "rb") as key_file:
-        #     key = key_file.read()
-        key = os.environ.get("FIREBASE_KEY")
+    def load_credentials_firebase():
+        with open("encryption_key_firebase.key", "rb") as key_file:
+            key = key_file.read()
+        # key = os.environ.get("FIREBASE_KEY")
         cipher = Fernet(key)
 
         with open("encrypted_credentials_firebase.enc", "rb") as encrypted_file:
@@ -43,11 +45,70 @@ def main():
 
         return credentials.Certificate(eval(decrypted_data.decode()))
     
+    def get_most_recent_date_dwm():
+        target_table = "monitoring_396408.tsel_nms"
+        project_id = "monitoring-396408"
+        job_location = "asia-southeast2"
+
+        with open("encryption_key_bigquery.key", "rb") as key_file:
+            key = key_file.read()
+        # key = os.environ.get("BIGQUERY_KEY")
+        cipher = Fernet(key)
+
+        with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
+            encrypted_data = encrypted_file.read()
+
+        decrypted_data = cipher.decrypt(encrypted_data)
+        credentials = Credentials.from_service_account_info(eval(decrypted_data.decode()))
+        client = bigquery.Client(credentials=credentials, project=project_id)
+
+        query = f"""
+            SELECT MAX(DATE_ID) AS most_recent_date
+            FROM `{project_id}.{target_table}`
+        """
+
+        query_job = client.query(query)
+        result = query_job.result()
+
+        for row in result:
+            most_recent_date = row["most_recent_date"]
+            return most_recent_date 
+        
+    def get_most_recent_date_hourly():
+        target_table = "monitoring_396408.tsel_nms_hourly"
+        project_id = "monitoring-396408"
+        job_location = "asia-southeast2"
+
+        with open("encryption_key_bigquery.key", "rb") as key_file:
+            key = key_file.read()
+        # key = os.environ.get("BIGQUERY_KEY")
+        cipher = Fernet(key)
+
+        with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
+            encrypted_data = encrypted_file.read()
+
+        decrypted_data = cipher.decrypt(encrypted_data)
+        credentials = Credentials.from_service_account_info(eval(decrypted_data.decode()))
+        client = bigquery.Client(credentials=credentials, project=project_id)
+
+        query = f"""
+            SELECT MAX(DATE_ID) AS most_recent_date
+            FROM `{project_id}.{target_table}`
+        """
+
+        query_job = client.query(query)
+        result = query_job.result()
+
+        for row in result:
+            most_recent_date = row["most_recent_date"]
+            return most_recent_date 
+
     def generate_title(period, site_id):
         return f"{period} Site {site_id.upper()}"
 
     def render_dwm_inputs():
         title_slot_dwm = st.empty()
+        st.markdown(f"<p align='center' style='margin-bottom: 30px; margin-top: -13px;'>Data Update: {get_most_recent_date_dwm()}</p>", unsafe_allow_html=True)
         st.markdown(f"<h3>🔍 Filters</h3>", unsafe_allow_html=True)
 
         col1, col2, col3, col4, col5 = st.columns([0.5, 1, 0.5, 0.5, 0.5])
@@ -76,10 +137,11 @@ def main():
         st.session_state.end_date_dwm = end_date_dwm
 
         title_dwm = generate_title(current_period_dwm, current_site_id_dwm)
-        title_slot_dwm.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>{title_dwm}</h1>", unsafe_allow_html=True)
+        title_slot_dwm.markdown(f"<h1 style='text-align: center;'>{title_dwm}</h1>", unsafe_allow_html=True)
 
     def render_hourly_inputs():
         title_slot = st.empty()
+        st.markdown(f"<p align='center' style='margin-bottom: 30px; margin-top: -13px;'>Data Update: {get_most_recent_date_hourly()}</p>", unsafe_allow_html=True)
         st.markdown(f"<h3>🔍 Filters</h3>", unsafe_allow_html=True)
         
         col1, col2, col3, col4, col5 = st.columns([0.5, 1, 0.5, 0.5, 0.5])
@@ -94,9 +156,9 @@ def main():
             options=["L1800", "L2100", "L2300", "L900"],
             default=["L1800", "L2100", "L2300", "L900"]
         )
-        start_date = col4.date_input(label="Start Date", value=datetime.date(2023, 9, 28))
-        today = datetime.datetime.now().date()
-        end_date = col5.date_input(label="End Date", value=today + datetime.timedelta(hours=7))
+        today = datetime.datetime.now().date() + datetime.timedelta(hours=7)
+        start_date = col4.date_input(label="Start Date", value=today - datetime.timedelta(days=3))
+        end_date = col5.date_input(label="End Date", value=today)
 
         title = generate_title(current_period_hourly, current_site_id_hourly)
         title_slot.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>{title}</h1>", unsafe_allow_html=True)
@@ -108,7 +170,7 @@ def main():
         st.session_state.end_date_hourly = end_date
 
         title = generate_title(current_period_hourly, current_site_id_hourly)
-        title_slot.markdown(f"<h1 style='text-align: center; margin-bottom: 20px;'>{title}</h1>", unsafe_allow_html=True)
+        title_slot.markdown(f"<h1 style='text-align: center;'>{title}</h1>", unsafe_allow_html=True)
 
     def main_page():
         with st.container():
@@ -120,18 +182,38 @@ def main():
             )
 
             if page_option == "Home":
-                st.write(f"Hello {st.session_state['user_email']}, you're logged in!")
+                st.markdown(f"<h3>Hello <a href='mailto:{st.session_state['user_email']}'>{st.session_state['user_email']}</a>, you're logged in!</h3>", unsafe_allow_html=True)
                 if st.button("Sign Out"):
                     st.session_state["logged_in"] = False
                     st.session_state["user_email"] = ""
                     st.rerun()
                 
             elif page_option == "Daily":
+                left_right_padding_style = """
+                    <style>
+                        div.block-container {
+                            padding-left: 1rem;
+                            padding-right: 1rem;
+                        }
+                    </style>
+                """
+                st.markdown(left_right_padding_style, unsafe_allow_html=True)
+
                 render_dwm_inputs()
                 with st.spinner("Loading..."):
                     Daily_Weekly_Monthly.app()
 
             elif page_option == "Hourly":
+                left_right_padding_style = """
+                    <style>
+                        div.block-container {
+                            padding-left: 1rem;
+                            padding-right: 1rem;
+                        }
+                    </style>
+                """
+                st.markdown(left_right_padding_style, unsafe_allow_html=True)
+
                 render_hourly_inputs()
                 with st.spinner("Loading..."):
                     Hourly.app()
@@ -178,7 +260,7 @@ def main():
     if "user_email" not in st.session_state:
         st.session_state["user_email"] = ""
 
-    creds = load_credentials()
+    creds = load_credentials_firebase()
     if not _apps:
         initialize_app(creds)
 
