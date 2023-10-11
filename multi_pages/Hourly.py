@@ -10,29 +10,6 @@ from google.oauth2.service_account import Credentials
 from cryptography.fernet import Fernet
 
 def app():
-    # st.set_page_config(
-    #     page_title="4G Monitoring - TSEL EID",
-    #     layout="wide"
-    # )
-
-    # reduce_header_height_style = """
-    #     <style>
-    #         div.block-container {
-    #             padding-top: 0rem;
-    #             padding-bottom: 1rem;
-    #         }
-    #     </style>
-    # """
-    # st.markdown(reduce_header_height_style, unsafe_allow_html=True)
-
-    # hide_decoration_bar_style = """
-    #     <style>
-    #         header {visibility: hidden;}
-    #         footer {visibility: hidden;}
-    #     </style>
-    # """
-    # st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
-
     st_expander = """
         <style>
         ul.streamlit-expander {
@@ -53,18 +30,123 @@ def app():
         </style>
     """, unsafe_allow_html=True)
 
-    site_id = st.session_state.site_id_hourly
-    band = st.session_state.band_hourly
-    period = st.session_state.period_hourly
-    start_date = st.session_state.start_date_hourly
-    end_date = st.session_state.end_date_hourly
+    def get_most_recent_date_hourly():
+        target_table = "monitoring_396408.tsel_nms"
+        project_id = "monitoring-396408"
+        job_location = "asia-southeast2"
 
-    # Cache for fetching data from GBQ
-    @st.cache_data()    
+        try:
+            with open("encryption_key_bigquery.key", "rb") as key_file:
+                key = key_file.read()
+        except FileNotFoundError:
+            key = os.environ.get("BIGQUERY_KEY")
+
+        cipher = Fernet(key)
+
+        with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
+            encrypted_data = encrypted_file.read()
+
+        decrypted_data = cipher.decrypt(encrypted_data)
+        credentials = Credentials.from_service_account_info(eval(decrypted_data.decode()))
+        client = bigquery.Client(credentials=credentials, project=project_id)
+
+        query = f"""
+            SELECT MAX(DATE_ID) AS most_recent_date
+            FROM `{project_id}.{target_table}`
+        """
+
+        query_job = client.query(query)
+        result = query_job.result()
+
+        for row in result:
+            most_recent_date = row["most_recent_date"]
+            return most_recent_date 
+
+    def generate_title(period, site_id):
+        return f"{period} Site {site_id.upper()}"
+
+    if "_site_id_hourly" not in st.session_state:
+        st.session_state._site_id_hourly = "saa108"
+    if "_period_hourly" not in st.session_state:
+        st.session_state._period_hourly = "Hourly"
+    if "_band_hourly" not in st.session_state:
+        st.session_state._band_hourly = ["L1800", "L2100", "L2300", "L900"]
+    if "_start_date_hourly" not in st.session_state:
+        st.session_state._start_date_hourly = datetime.datetime.now().date() + datetime.timedelta(hours=7) - datetime.timedelta(days=3)
+    if "_end_date_hourly" not in st.session_state:
+        st.session_state._end_date_hourly = datetime.datetime.now().date() + datetime.timedelta(hours=7)
+
+    def update_site_id_hourly():
+        st.session_state._site_id_hourly = st.session_state.site_id_hourly
+    def update_period_hourly():
+        st.session_state._period_hourly = st.session_state.period_hourly
+    def update_band_hourly():
+        st.session_state._band_hourly = st.session_state.band_hourly
+    def update_start_date_hourly():
+        st.session_state._start_date_hourly = st.session_state.start_date_hourly
+    def update_end_date_hourly():
+        st.session_state._end_date_hourly = st.session_state.end_date_hourly
+
+    title_slot_hourly = st.empty()
+    st.markdown(f"<p align='center' style='margin-bottom: 30px; margin-top: -15px;'>Data Update: {get_most_recent_date_hourly()}</p>", unsafe_allow_html=True)
+    st.markdown(f"<h3>🔍 Filters</h3>", unsafe_allow_html=True)
+
+    col1, col2, col3, col4, col5 = st.columns([0.5, 1, 0.5, 0.5, 0.5])
+
+    site_id_hourly_input = col1.text_input(
+        label="Site ID", 
+        value=st.session_state._site_id_hourly,
+        key="site_id_hourly",
+        on_change=update_site_id_hourly
+    )
+
+    band_hourly_input = col2.multiselect(
+        label="Band",
+        options=["L1800", "L2100", "L2300", "L900"],
+        default=st.session_state._band_hourly,
+        key="band_hourly",
+        on_change=update_band_hourly
+    )
+
+    period_hourly_input = col3.selectbox(
+        label="Period",
+        options=["Hourly"],
+        index=["Hourly"].index(st.session_state._period_hourly),
+        key="period_hourly",
+        on_change=update_period_hourly
+    )
+
+    start_date_hourly_input = col4.date_input(
+        label="Start Date", 
+        value=st.session_state._start_date_hourly,
+        key="start_date_hourly",
+        on_change=update_start_date_hourly
+    )
+
+    end_date_hourly_input = col5.date_input(
+        label="End Date", 
+        value=st.session_state._end_date_hourly,
+        key="end_date_hourly",
+        on_change=update_end_date_hourly
+    )
+
+    title_hourly = generate_title(period_hourly_input, site_id_hourly_input)
+    title_slot_hourly.markdown(f"<h1 style='text-align: center; margin-top: -60px'>{title_hourly}</h1>", unsafe_allow_html=True)
+
+    st.session_state._site_id_hourly = site_id_hourly_input
+    st.session_state._period_hourly = period_hourly_input
+    st.session_state._band_hourly = band_hourly_input
+    st.session_state._start_date_hourly = start_date_hourly_input
+    st.session_state._end_date_hourly = end_date_hourly_input
+
+    @st.cache_data(show_spinner=False)    
     def fetch_data(query, project_id):
-        # with open("encryption_key_bigquery.key", "rb") as key_file:
-        #     key = key_file.read()
-        key = os.environ.get("BIGQUERY_KEY")
+        try:
+            with open("encryption_key_bigquery.key", "rb") as key_file:
+                key = key_file.read()
+        except FileNotFoundError:
+            key = os.environ.get("BIGQUERY_KEY")
+            
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
@@ -80,7 +162,7 @@ def app():
         df_polars = pl.from_arrow(rows.to_arrow())        
         return df_polars
 
-    if len(site_id) == 6:
+    if len(site_id_hourly_input) == 6:
         target_table = "monitoring_396408.tsel_nms_hourly"
         project_id = "monitoring-396408"
         job_location = "asia-southeast2"
@@ -115,8 +197,8 @@ def app():
                 FROM
                     `{project_id}.{target_table}`
                 WHERE
-                    LOWER(EUTRANCELLFDD) LIKE '%{site_id.lower()}%'
-                    AND DATE_ID BETWEEN '{start_date}' AND '{end_date}'
+                    LOWER(EUTRANCELLFDD) LIKE '%{site_id_hourly_input.lower()}%'
+                    AND DATE_ID BETWEEN '{start_date_hourly_input}' AND '{end_date_hourly_input}'
             )
 
             SELECT
@@ -139,7 +221,7 @@ def app():
             ])
             df_polars = df_polars.with_columns(df_polars["DATE_ID"].cast(pl.Datetime))
             df_polars = df_polars.drop("HOUR_ID")
-            df_polars = df_polars.filter(df_polars["Band"].is_in(band))
+            df_polars = df_polars.filter(df_polars["Band"].is_in(band_hourly_input))
 
             st.markdown(f"<h3>📊 Charts</h3>", unsafe_allow_html=True)
             col1 = st.columns(1)[0]
@@ -158,7 +240,7 @@ def app():
                 )
 
 
-            if period == "Hourly":
+            if period_hourly_input == "Hourly":
                 dtick = 1*60*60*1000
                 every = "1h"
 

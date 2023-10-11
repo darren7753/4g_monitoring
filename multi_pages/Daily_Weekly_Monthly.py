@@ -10,29 +10,6 @@ from google.oauth2.service_account import Credentials
 from cryptography.fernet import Fernet
 
 def app():
-    # st.set_page_config(
-    #     page_title="4G Monitoring - TSEL EID",
-    #     layout="wide"
-    # )
-
-    # reduce_header_height_style = """
-    #     <style>
-    #         div.block-container {
-    #             padding-top: 0rem;
-    #             padding-bottom: 1rem;
-    #         }
-    #     </style>
-    # """
-    # st.markdown(reduce_header_height_style, unsafe_allow_html=True)
-
-    # hide_decoration_bar_style = """
-    #     <style>
-    #         header {visibility: hidden;}
-    #         footer {visibility: hidden;}
-    #     </style>
-    # """
-    # st.markdown(hide_decoration_bar_style, unsafe_allow_html=True)
-
     st_expander = """
         <style>
         ul.streamlit-expander {
@@ -53,18 +30,123 @@ def app():
         </style>
     """, unsafe_allow_html=True)
 
-    site_id_dwm = st.session_state.site_id_dwm
-    band_dwm = st.session_state.band_dwm
-    period_dwm = st.session_state.period_dwm
-    start_date_dwm = st.session_state.start_date_dwm
-    end_date_dwm = st.session_state.end_date_dwm
+    def get_most_recent_date_dwm():
+        target_table = "monitoring_396408.tsel_nms"
+        project_id = "monitoring-396408"
+        job_location = "asia-southeast2"
 
-    # Cache for fetching data from GBQ
-    @st.cache_data()    
+        try:
+            with open("encryption_key_bigquery.key", "rb") as key_file:
+                key = key_file.read()
+        except FileNotFoundError:
+            key = os.environ.get("BIGQUERY_KEY")
+
+        cipher = Fernet(key)
+
+        with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
+            encrypted_data = encrypted_file.read()
+
+        decrypted_data = cipher.decrypt(encrypted_data)
+        credentials = Credentials.from_service_account_info(eval(decrypted_data.decode()))
+        client = bigquery.Client(credentials=credentials, project=project_id)
+
+        query = f"""
+            SELECT MAX(DATE_ID) AS most_recent_date
+            FROM `{project_id}.{target_table}`
+        """
+
+        query_job = client.query(query)
+        result = query_job.result()
+
+        for row in result:
+            most_recent_date = row["most_recent_date"]
+            return most_recent_date 
+
+    def generate_title(period, site_id):
+        return f"{period} Site {site_id.upper()}"
+
+    if "_site_id_dwm" not in st.session_state:
+        st.session_state._site_id_dwm = "saa108"
+    if "_period_dwm" not in st.session_state:
+        st.session_state._period_dwm = "Daily"
+    if "_band_dwm" not in st.session_state:
+        st.session_state._band_dwm = ["L1800", "L2100", "L2300", "L900"]
+    if "_start_date_dwm" not in st.session_state:
+        st.session_state._start_date_dwm = datetime.date(2023, 7, 1)
+    if "_end_date_dwm" not in st.session_state:
+        st.session_state._end_date_dwm = datetime.datetime.now().date() + datetime.timedelta(hours=7)
+
+    def update_site_id_dwm():
+        st.session_state._site_id_dwm = st.session_state.site_id_dwm
+    def update_period_dwm():
+        st.session_state._period_dwm = st.session_state.period_dwm
+    def update_band_dwm():
+        st.session_state._band_dwm = st.session_state.band_dwm
+    def update_start_date_dwm():
+        st.session_state._start_date_dwm = st.session_state.start_date_dwm
+    def update_end_date_dwm():
+        st.session_state._end_date_dwm = st.session_state.end_date_dwm
+
+    title_slot_dwm = st.empty()
+    st.markdown(f"<p align='center' style='margin-bottom: 30px; margin-top: -15px;'>Data Update: {get_most_recent_date_dwm()}</p>", unsafe_allow_html=True)
+    st.markdown(f"<h3>🔍 Filters</h3>", unsafe_allow_html=True)
+
+    col1, col2, col3, col4, col5 = st.columns([0.5, 1, 0.5, 0.5, 0.5])
+
+    site_id_dwm_input = col1.text_input(
+        label="Site ID", 
+        value=st.session_state._site_id_dwm,
+        key="site_id_dwm",
+        on_change=update_site_id_dwm
+    )
+
+    band_dwm_input = col2.multiselect(
+        label="Band",
+        options=["L1800", "L2100", "L2300", "L900"],
+        default=st.session_state._band_dwm,
+        key="band_dwm",
+        on_change=update_band_dwm
+    )
+
+    period_dwm_input = col3.selectbox(
+        label="Period",
+        options=["Daily", "Weekly", "Monthly"],
+        index=["Daily", "Weekly", "Monthly"].index(st.session_state._period_dwm),
+        key="period_dwm",
+        on_change=update_period_dwm
+    )
+
+    start_date_dwm_input = col4.date_input(
+        label="Start Date", 
+        value=st.session_state._start_date_dwm,
+        key="start_date_dwm",
+        on_change=update_start_date_dwm
+    )
+
+    end_date_dwm_input = col5.date_input(
+        label="End Date", 
+        value=st.session_state._end_date_dwm,
+        key="end_date_dwm",
+        on_change=update_end_date_dwm
+    )
+
+    title_dwm = generate_title(period_dwm_input, site_id_dwm_input)
+    title_slot_dwm.markdown(f"<h1 style='text-align: center; margin-top: -60px'>{title_dwm}</h1>", unsafe_allow_html=True)
+
+    st.session_state._site_id_dwm = site_id_dwm_input
+    st.session_state._period_dwm = period_dwm_input
+    st.session_state._band_dwm = band_dwm_input
+    st.session_state._start_date_dwm = start_date_dwm_input
+    st.session_state._end_date_dwm = end_date_dwm_input
+
+    @st.cache_data(show_spinner=False)    
     def fetch_data(query, project_id):
-        # with open("encryption_key_bigquery.key", "rb") as key_file:
-        #     key = key_file.read()
-        key = os.environ.get("BIGQUERY_KEY")
+        try:
+            with open("encryption_key_bigquery.key", "rb") as key_file:
+                key = key_file.read()
+        except FileNotFoundError:
+            key = os.environ.get("BIGQUERY_KEY")
+
         cipher = Fernet(key)
 
         with open("encrypted_credentials_bigquery.enc", "rb") as encrypted_file:
@@ -80,7 +162,7 @@ def app():
         df_polars = pl.from_arrow(rows.to_arrow())        
         return df_polars
 
-    if len(site_id_dwm) == 6:
+    if len(site_id_dwm_input) == 6:
         target_table = "monitoring_396408.tsel_nms"
         project_id = "monitoring-396408"
         job_location = "asia-southeast2"
@@ -115,8 +197,8 @@ def app():
                 FROM
                     `{project_id}.{target_table}`
                 WHERE
-                    LOWER(EUTRANCELLFDD) LIKE '%{site_id_dwm.lower()}%'
-                    AND DATE_ID BETWEEN '{start_date_dwm}' AND '{end_date_dwm}'
+                    LOWER(EUTRANCELLFDD) LIKE '%{site_id_dwm_input.lower()}%'
+                    AND DATE_ID BETWEEN '{start_date_dwm_input}' AND '{end_date_dwm_input}'
             )
 
             SELECT
@@ -139,7 +221,7 @@ def app():
                 (df_polars["Uplink_Traffic_Volume"] / 1000).alias("Uplink_Traffic_Volume"),
                 (df_polars["Total_Traffic_Volume"] / 1000).alias("Total_Traffic_Volume")
             ])
-            df_polars = df_polars.filter(df_polars["Band"].is_in(band_dwm))
+            df_polars = df_polars.filter(df_polars["Band"].is_in(band_dwm_input))
 
             st.markdown(f"<h3>📊 Charts</h3>", unsafe_allow_html=True)
             col1 = st.columns(1)[0]
@@ -158,10 +240,10 @@ def app():
                 )
 
 
-            if period_dwm == "Daily":
+            if period_dwm_input == "Daily":
                 dtick = 3*24*60*60*1000
                 every = "1d"
-            elif period_dwm == "Weekly":
+            elif period_dwm_input == "Weekly":
                 dtick = 7*24*60*60*1000
                 every = "1w"
             else:
