@@ -1,8 +1,9 @@
-import streamlit as st
 import os
+import json
+import pyrebase
+import streamlit as st
 
 from multi_pages import Daily_Weekly_Monthly, Hourly
-from firebase_admin import credentials, initialize_app, auth, _apps
 from cryptography.fernet import Fernet
 from streamlit_option_menu import option_menu
 
@@ -42,7 +43,7 @@ def main():
             encrypted_data = encrypted_file.read()
         decrypted_data = cipher.decrypt(encrypted_data)
 
-        return credentials.Certificate(eval(decrypted_data.decode()))
+        return json.loads(decrypted_data.decode())
 
     def main_page():
         with st.container():
@@ -109,30 +110,22 @@ def main():
 
     def check_account(email, password):
         try:
-            user_by_email = auth.get_user_by_email(email)
-        except auth.UserNotFoundError:
-            st.error("User not found. Please sign up first.")
-            return
+            user = st.session_state.auth_pyrebase.sign_in_with_email_and_password(email, password)
+            st.session_state["logged_in"] = True
+            st.session_state["user_email"] = email
+            st.rerun()
+        except Exception as e:
+            st.error("Incorrect email or password. Please try again.")
 
-        try:
-            user_by_uid = auth.get_user(password)
-            if user_by_email.uid == user_by_uid.uid:
-                st.session_state["logged_in"] = True
-                st.session_state["user_email"] = email
-                st.rerun()
-            else:
-                st.error("Incorrect password. Please try again.")
-        except auth.UserNotFoundError:
-            st.error("Incorrect password. Please try again.")
+    firebase_config = load_credentials_firebase()
 
+    if "firebase" not in st.session_state:
+        st.session_state.firebase = pyrebase.initialize_app(firebase_config)
+        st.session_state.auth_pyrebase = st.session_state.firebase.auth()
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
     if "user_email" not in st.session_state:
         st.session_state["user_email"] = ""
-
-    creds = load_credentials_firebase()
-    if not _apps:
-        initialize_app(creds)
 
     if st.session_state["logged_in"]:
         main_page()
