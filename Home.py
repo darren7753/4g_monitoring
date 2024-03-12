@@ -108,6 +108,8 @@ def main():
                 else:
                     check_account(email, password)
 
+        st.info('For demonstration purposes, please log in using "matthewdarren7753@gmail.com" as the email and "darren" as the password.', icon="ℹ️")
+
     def check_account(email, password):
         try:
             user = st.session_state.auth_pyrebase.sign_in_with_email_and_password(email, password)
