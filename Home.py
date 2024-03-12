@@ -108,7 +108,7 @@ def main():
                 else:
                     check_account(email, password)
 
-        st.info('For demonstration purposes, please log in using "matthewdarren7753@gmail.com" as the email and "darren" as the password.', icon="ℹ️")
+            st.info('For demonstration purposes, please log in using "matthewdarren7753@gmail.com" as the email and "darren" as the password.', icon="ℹ️")
 
     def check_account(email, password):
         try:
