@@ -1,4 +1,4 @@
-# 4G Monitoring Dashboard
+# 4G Monitoring Dashboard <a href="https://4gmonitoring.streamlit.app/" target="_blank"><img src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg" alt="Open in Streamlit"></a>
 
 **Note**: The data showcased in this repository has been replaced with dummy data to ensure confidentiality.
 
